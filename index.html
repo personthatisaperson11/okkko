@@ -1,0 +1,850 @@
+from pathlib import Path
+import re, subprocess
+
+html = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rollercoaster elevator chaos 🎢</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@600;700;800&display=swap');
+
+:root{
+  --pink:#ff97c8;
+  --blue:#8edcff;
+  --lav:#cbb5ff;
+  --mint:#baf3dd;
+  --yellow:#ffe78d;
+  --ink:#2d3150;
+  --navy:#4b4274;
+  --white:#fff;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  min-height:100vh;
+  font-family:'Nunito',sans-serif;
+  color:var(--ink);
+  background:
+    radial-gradient(circle at 10% 12%,rgba(255,255,255,.95) 0 6%,transparent 6.5%),
+    radial-gradient(circle at 86% 16%,rgba(255,255,255,.85) 0 5%,transparent 5.5%),
+    linear-gradient(135deg,#c5f2ff,#ffe1ef 42%,#d7caff 72%,#cff7e6);
+  overflow-x:hidden;
+}
+
+button{
+  font:inherit;
+  cursor:pointer;
+}
+
+.app{
+  width:min(1180px,94%);
+  margin:0 auto;
+  padding:20px 0 44px;
+}
+
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  gap:16px;
+  margin-bottom:16px;
+}
+
+.logo h1{
+  margin:0;
+  font:700 clamp(34px,6vw,58px)/.95 'Fredoka',sans-serif;
+  color:var(--navy);
+  text-shadow:0 4px 0 #fff;
+}
+
+.logo p{
+  margin:8px 0 0;
+  background:rgba(255,255,255,.85);
+  display:inline-block;
+  padding:7px 11px;
+  border-radius:999px;
+  font-weight:800;
+}
+
+.top{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.pill,.reset{
+  border:0;
+  border-radius:14px;
+  padding:10px 13px;
+  font-weight:900;
+  box-shadow:0 8px 18px rgba(76,62,115,.12);
+}
+.pill{background:rgba(255,255,255,.92)}
+.reset{background:var(--navy);color:#fff}
+
+.layout{
+  display:grid;
+  grid-template-columns:1.35fr .65fr;
+  gap:16px;
+}
+
+.card{
+  background:rgba(255,255,255,.93);
+  border:2px solid rgba(255,255,255,.9);
+  border-radius:28px;
+  box-shadow:0 20px 50px rgba(76,62,115,.14);
+  padding:18px;
+}
+
+.game-card{
+  padding:12px;
+  position:relative;
+  overflow:hidden;
+}
+
+#gameCanvas{
+  display:block;
+  width:100%;
+  height:auto;
+  border-radius:22px;
+  background:#bcefff;
+  outline:3px solid rgba(255,255,255,.8);
+  outline-offset:-5px;
+}
+
+.controls{
+  display:flex;
+  flex-wrap:wrap;
+  gap:9px;
+  margin-top:12px;
+}
+
+.action{
+  border:0;
+  border-radius:15px;
+  padding:11px 14px;
+  font-weight:900;
+  background:#fff;
+  color:var(--navy);
+  box-shadow:0 6px 14px rgba(76,62,115,.08);
+}
+.action:hover{transform:translateY(-2px)}
+.wonko{
+  background:linear-gradient(135deg,#ff7da9,#c69dff);
+  color:#fff;
+  animation:pulse 1s infinite alternate;
+}
+@keyframes pulse{
+  to{transform:scale(1.04) rotate(-1deg)}
+}
+
+.status{
+  margin-top:10px;
+  background:#f8f6ff;
+  border-radius:16px;
+  padding:10px 12px;
+  font-weight:800;
+  min-height:44px;
+}
+
+.side{
+  display:grid;
+  gap:16px;
+}
+
+.side h2{
+  margin:0 0 10px;
+  font:700 22px 'Fredoka',sans-serif;
+  color:var(--navy);
+}
+
+.statgrid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+}
+
+.stat{
+  background:#f7f5ff;
+  border-radius:14px;
+  padding:10px;
+  font-weight:900;
+}
+
+.help{
+  line-height:1.55;
+  font-size:14px;
+  background:#f9fbff;
+  border-radius:16px;
+  padding:12px;
+}
+
+.log{
+  display:grid;
+  gap:7px;
+  max-height:230px;
+  overflow:auto;
+}
+
+.logline{
+  background:#f8f7ff;
+  border-radius:12px;
+  padding:8px 10px;
+  font-size:13px;
+  font-weight:700;
+}
+
+.badge{
+  display:inline-block;
+  padding:7px 10px;
+  border-radius:999px;
+  background:#fff0f7;
+  font-weight:900;
+  margin:4px 3px 0 0;
+}
+
+@media(max-width:920px){
+  .layout{grid-template-columns:1fr}
+}
+@media(max-width:640px){
+  header{align-items:flex-start;flex-direction:column}
+  .top{justify-content:flex-start}
+}
+
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="logo">
+    <h1>rollercoaster elevator chaos 🎢</h1>
+    <p>move your character • ride the coaster • enter the elevator • press the forbidden button</p>
+  </div>
+  <div class="top">
+    <div class="pill">🎢 <span id="modeLabel">ride</span></div>
+    <div class="pill">⭐ chaos <span id="chaosLabel">0</span></div>
+    <button class="reset" id="resetBtn">restart</button>
+  </div>
+</header>
+
+<div class="layout">
+  <main class="card game-card">
+    <canvas id="gameCanvas" width="900" height="560"></canvas>
+
+    <div class="controls">
+      <button class="action" id="startBtn">▶ start ride</button>
+      <button class="action" id="leftBtn">⬅ move</button>
+      <button class="action" id="rightBtn">➡ move</button>
+      <button class="action" id="upBtn">⬆ move</button>
+      <button class="action" id="downBtn">⬇ move</button>
+      <button class="action wonko" id="wonkoBtn">💥 WONKO THIS FLOOR</button>
+    </div>
+
+    <div class="status" id="status">
+      the ride is waiting. this is suspiciously peaceful.
+    </div>
+  </main>
+
+  <aside class="side">
+    <section class="card">
+      <h2>🎮 controls</h2>
+      <div class="help">
+        <b>rollercoaster:</b> press <b>start ride</b> and watch the character zoom through the track.<br><br>
+        <b>elevator:</b> use <b>arrow keys</b> or the move buttons to walk around.<br><br>
+        <b>wonko:</b> sends the elevator to a completely random floor and starts the pig chase. there is <b>no game over</b>.
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>📊 chaos stats</h2>
+      <div class="statgrid">
+        <div class="stat">🎢 rides <span id="rides">0</span></div>
+        <div class="stat">🛗 floors <span id="floors">0</span></div>
+        <div class="stat">🐷 pigs <span id="pigCount">0</span></div>
+        <div class="stat">💥 wonkos <span id="wonkos">0</span></div>
+      </div>
+      <div style="margin-top:12px">
+        <span class="badge">no fails ✅</span>
+        <span class="badge">random nonsense ✅</span>
+        <span class="badge">walkable character ✅</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>📜 chaos log</h2>
+      <div class="log" id="log"></div>
+    </section>
+  </aside>
+</div>
+</div>
+
+<script>
+"use strict";
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const state = {
+  mode: "ride",
+  runningRide: false,
+  elevatorActive: false,
+  floor: 1,
+  chaos: 0,
+  rides: 0,
+  floors: 0,
+  pigs: 0,
+  wonkos: 0,
+  rideTime: 0,
+  rideDuration: 9,
+  worldTime: 0
+};
+
+const player = {
+  x: 110,
+  y: 420,
+  radius: 18,
+  speed: 230
+};
+
+const keys = new Set();
+const pigs = [];
+const particles = [];
+let lastTime = performance.now();
+let rideStart = 0;
+let messageTimer = null;
+
+/* ---------- helpers ---------- */
+
+function clamp(value, min, max){
+  return Math.max(min, Math.min(max, value));
+}
+
+function random(min, max){
+  return min + Math.random() * (max - min);
+}
+
+function randomInt(min, max){
+  return Math.floor(random(min, max + 1));
+}
+
+function setStatus(text){
+  document.getElementById("status").textContent = text;
+}
+
+function log(text){
+  const row = document.createElement("div");
+  row.className = "logline";
+  row.textContent = text;
+  const box = document.getElementById("log");
+  box.prepend(row);
+  while(box.children.length > 14){
+    box.lastElementChild.remove();
+  }
+}
+
+function updateStats(){
+  document.getElementById("modeLabel").textContent = state.mode === "ride" ? "ride" : "elevator";
+  document.getElementById("chaosLabel").textContent = state.chaos;
+  document.getElementById("rides").textContent = state.rides;
+  document.getElementById("floors").textContent = state.floors;
+  document.getElementById("pigCount").textContent = state.pigs;
+  document.getElementById("wonkos").textContent = state.wonkos;
+}
+
+function addParticle(x, y, emoji){
+  particles.push({
+    x,
+    y,
+    vx: random(-50,50),
+    vy: random(-90,-20),
+    life: 1,
+    emoji
+  });
+  if(particles.length > 80) particles.shift();
+}
+
+function clearPigs(){
+  pigs.length = 0;
+}
+
+function spawnPigs(count){
+  clearPigs();
+  for(let i=0;i<count;i++){
+    pigs.push({
+      x: random(40,860),
+      y: random(80,500),
+      speed: random(40,85),
+      phase: random(0,Math.PI*2)
+    });
+  }
+  state.pigs = count;
+}
+
+/* ---------- drawing ---------- */
+
+function drawBackground(){
+  const grad = ctx.createLinearGradient(0,0,0,560);
+
+  if(state.mode === "ride"){
+    grad.addColorStop(0,"#91dcff");
+    grad.addColorStop(1,"#f5d7eb");
+  }else{
+    grad.addColorStop(0,"#241d44");
+    grad.addColorStop(1,"#6b4d86");
+  }
+
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,900,560);
+
+  if(state.mode === "ride"){
+    ctx.fillStyle = "#ffffff";
+    for(let i=0;i<7;i++){
+      const x = (i * 150 + 90) % 900;
+      const y = 60 + (i % 3)*55;
+      ctx.beginPath();
+      ctx.arc(x,y,22,0,Math.PI*2);
+      ctx.arc(x+25,y+5,17,0,Math.PI*2);
+      ctx.arc(x-24,y+7,16,0,Math.PI*2);
+      ctx.fill();
+    }
+  }else{
+    for(let i=0;i<45;i++){
+      ctx.fillStyle = i%2===0 ? "rgba(255,255,255,.13)" : "rgba(255,130,198,.1)";
+      ctx.fillRect((i*87)%900,(i*47)%560,4,4);
+    }
+  }
+}
+
+function drawTrack(){
+  ctx.save();
+
+  ctx.strokeStyle="#5a4778";
+  ctx.lineWidth=30;
+  ctx.lineCap="round";
+  ctx.beginPath();
+  ctx.moveTo(60,430);
+  ctx.bezierCurveTo(170,90,300,510,430,170);
+  ctx.bezierCurveTo(560,-30,690,500,835,125);
+  ctx.stroke();
+
+  ctx.strokeStyle="#d8b3ff";
+  ctx.lineWidth=17;
+  ctx.beginPath();
+  ctx.moveTo(60,430);
+  ctx.bezierCurveTo(170,90,300,510,430,170);
+  ctx.bezierCurveTo(560,-30,690,500,835,125);
+  ctx.stroke();
+
+  ctx.strokeStyle="#ffffff";
+  ctx.lineWidth=4;
+  ctx.beginPath();
+  ctx.moveTo(60,430);
+  ctx.bezierCurveTo(170,90,300,510,430,170);
+  ctx.bezierCurveTo(560,-30,690,500,835,125);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawCoaster(){
+  const t = state.rideTime;
+  const x = 70 + (Math.sin(t*2.1)*.5+.5)*760;
+  const y = 330 - Math.sin(t*2.1)*120 - Math.sin(t*4.2)*45;
+
+  ctx.save();
+  ctx.translate(x,y);
+
+  ctx.fillStyle="#ff7dab";
+  ctx.beginPath();
+  ctx.roundRect(-45,-22,90,40,15);
+  ctx.fill();
+
+  ctx.fillStyle="#fff";
+  ctx.beginPath();
+  ctx.arc(-22,-31,12,0,Math.PI*2);
+  ctx.arc(0,-31,12,0,Math.PI*2);
+  ctx.arc(22,-31,12,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.font="27px Fredoka";
+  ctx.textAlign="center";
+  ctx.fillText("😵",0,4);
+
+  ctx.restore();
+}
+
+function drawElevator(){
+  ctx.fillStyle="#e4ddf2";
+  ctx.fillRect(90,45,720,470);
+
+  ctx.strokeStyle="#9b8db4";
+  ctx.lineWidth=8;
+  ctx.strokeRect(90,45,720,470);
+
+  for(let x=130;x<800;x+=110){
+    ctx.fillStyle="#c5eefe";
+    ctx.fillRect(x,75,70,85);
+    ctx.strokeStyle="#8bcce7";
+    ctx.lineWidth=4;
+    ctx.strokeRect(x,75,70,85);
+  }
+
+  ctx.fillStyle="#50436f";
+  ctx.font="700 32px Fredoka";
+  ctx.textAlign="center";
+  ctx.fillText("FLOOR "+state.floor,450,205);
+
+  ctx.font="700 18px Nunito";
+  ctx.fillText(
+    state.chaos >= 20 ? "something is VERY wrong here" : "please enjoy this normal elevator",
+    450,
+    235
+  );
+
+  ctx.fillStyle="#b9adc9";
+  ctx.fillRect(270,275,360,155);
+  ctx.fillStyle="#8c7aa8";
+  ctx.fillRect(440,300,20,115);
+
+  ctx.font="54px sans-serif";
+  ctx.textAlign="center";
+  ctx.fillText("⬆️",145,360);
+  ctx.fillText("⬇️",755,360);
+
+  ctx.font="24px Fredoka";
+  ctx.fillText("move with arrows / wasd",450,480);
+}
+
+function drawPlayer(){
+  ctx.save();
+  ctx.translate(player.x,player.y);
+
+  ctx.fillStyle="#ff9ecb";
+  ctx.beginPath();
+  ctx.arc(0,0,22,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="#fff";
+  ctx.beginPath();
+  ctx.arc(-7,-5,5,0,Math.PI*2);
+  ctx.arc(7,-5,5,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="#3b3154";
+  ctx.beginPath();
+  ctx.arc(-7,-5,2,0,Math.PI*2);
+  ctx.arc(7,-5,2,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="#ff6f9e";
+  ctx.beginPath();
+  ctx.arc(0,5,5,0,Math.PI);
+  ctx.fill();
+
+  ctx.font="18px Fredoka";
+  ctx.textAlign="center";
+  ctx.fillText("✨",0,-30);
+
+  ctx.restore();
+}
+
+function drawPigs(){
+  pigs.forEach((pig,index)=>{
+    ctx.save();
+    ctx.translate(pig.x,pig.y);
+
+    ctx.fillStyle="#ffb4c9";
+    ctx.beginPath();
+    ctx.ellipse(0,0,27,20,0,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle="#ff8eab";
+    ctx.beginPath();
+    ctx.arc(26,0,15,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle="#4a3755";
+    ctx.beginPath();
+    ctx.arc(22,-4,2.5,0,Math.PI*2);
+    ctx.arc(31,-4,2.5,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle="#ff6f9e";
+    ctx.beginPath();
+    ctx.arc(29,5,5,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.font="18px sans-serif";
+    ctx.fillText(index%2===0 ? "💢" : "😡",-3,-25);
+
+    ctx.restore();
+  });
+}
+
+function drawParticles(){
+  particles.forEach(p=>{
+    ctx.globalAlpha = Math.max(0,p.life);
+    ctx.font="22px sans-serif";
+    ctx.fillText(p.emoji,p.x,p.y);
+  });
+  ctx.globalAlpha=1;
+}
+
+function draw(){
+  drawBackground();
+
+  if(state.mode==="ride"){
+    drawTrack();
+    drawCoaster();
+  }else{
+    drawElevator();
+    drawPigs();
+  }
+
+  drawPlayer();
+  drawParticles();
+}
+
+/* ---------- gameplay ---------- */
+
+function startRide(){
+  if(state.runningRide) return;
+
+  state.mode="ride";
+  state.runningRide=true;
+  state.elevatorActive=false;
+  state.rideTime=0;
+  state.rides += 1;
+
+  player.x=110;
+  player.y=420;
+
+  setStatus("🎢 the coaster has started. absolutely normal. probably.");
+  log("🎢 the rollercoaster ride has begun.");
+  updateStats();
+}
+
+function finishRide(){
+  state.runningRide=false;
+  state.mode="elevator";
+  state.elevatorActive=true;
+  state.floor=1;
+  state.floors += 1;
+  state.chaos += 3;
+
+  player.x=450;
+  player.y=390;
+  clearPigs();
+
+  setStatus("🛗 the coaster ended. somehow the exit is an elevator.");
+  log("🛗 Shocking twist: the ride ends inside an elevator.");
+  updateStats();
+}
+
+function wonko(){
+  if(state.mode!=="elevator"){
+    setStatus("💥 WONKO only works after you get into the elevator.");
+    return;
+  }
+
+  const oldFloor=state.floor;
+  state.floor=randomInt(1,99);
+  state.wonkos += 1;
+  state.floors += 1;
+  state.chaos += randomInt(5,13);
+
+  spawnPigs(randomInt(3,7));
+
+  player.x=random(180,720);
+  player.y=random(270,470);
+
+  const weirdThings=[
+    "🐷 pigs are chasing you for no reason.",
+    "🍌 the elevator played banana music.",
+    "🦆 a duck pressed the emergency button.",
+    "🎪 the floor is now an extremely small circus.",
+    "🛒 there is a shopping cart where the floor should be.",
+    "🌵 someone replaced the elevator buttons with tiny cacti.",
+    "🍕 a pizza is legally considered a passenger here.",
+    "🦖 something dinosaur-shaped just ran past."
+  ];
+
+  const weird=weirdThings[randomInt(0,weirdThings.length-1)];
+
+  setStatus("💥 WONKO! floor "+state.floor+" • "+weird);
+  log("💥 WONKO sent the elevator from floor "+oldFloor+" to floor "+state.floor+".");
+
+  if(state.chaos>100) state.chaos=100;
+  updateStats();
+}
+
+function movePlayer(dx,dy){
+  if(state.mode!=="elevator") return;
+
+  const speed = player.speed / 60;
+  player.x += dx*speed;
+  player.y += dy*speed;
+
+  player.x=clamp(player.x,120,780);
+  player.y=clamp(player.y,250,495);
+
+  if(pigs.length){
+    setStatus("🐷 keep moving. the pigs are STILL chasing you.");
+  }
+}
+
+function updatePigs(dt){
+  if(state.mode!=="elevator") return;
+
+  pigs.forEach(pig=>{
+    const dx=player.x-pig.x;
+    const dy=player.y-pig.y;
+    const dist=Math.hypot(dx,dy)||1;
+
+    pig.x += (dx/dist)*pig.speed*dt;
+    pig.y += (dy/dist)*pig.speed*dt;
+    pig.phase += dt*5;
+    pig.y += Math.sin(pig.phase)*dt*10;
+
+    if(dist<45){
+      player.x=clamp(player.x+random(-55,55),120,780);
+      player.y=clamp(player.y+random(-35,35),250,495);
+      addParticle(player.x,player.y,"💨");
+      setStatus("🐷 BONK. the pig bumped into you. there is still NO GAME OVER.");
+    }
+  });
+}
+
+function updateParticles(dt){
+  particles.forEach(p=>{
+    p.x += p.vx*dt;
+    p.y += p.vy*dt;
+    p.vy += 50*dt;
+    p.life -= dt;
+  });
+
+  for(let i=particles.length-1;i>=0;i--){
+    if(particles[i].life<=0) particles.splice(i,1);
+  }
+}
+
+function update(dt){
+  state.worldTime += dt;
+
+  if(state.runningRide){
+    state.rideTime += dt;
+    if(state.rideTime>=state.rideDuration){
+      finishRide();
+    }
+  }
+
+  updatePigs(dt);
+  updateParticles(dt);
+}
+
+/* ---------- input ---------- */
+
+window.addEventListener("keydown",event=>{
+  const key=event.key.toLowerCase();
+  if(["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"].includes(key)){
+    event.preventDefault();
+    keys.add(key);
+  }
+});
+
+window.addEventListener("keyup",event=>{
+  keys.delete(event.key.toLowerCase());
+});
+
+function inputMovement(){
+  let dx=0;
+  let dy=0;
+
+  if(keys.has("arrowleft") || keys.has("a")) dx-=1;
+  if(keys.has("arrowright") || keys.has("d")) dx+=1;
+  if(keys.has("arrowup") || keys.has("w")) dy-=1;
+  if(keys.has("arrowdown") || keys.has("s")) dy+=1;
+
+  if(dx || dy){
+    const len=Math.hypot(dx,dy)||1;
+    movePlayer(dx/len,dy/len);
+  }
+}
+
+function bindMove(buttonId,dx,dy){
+  const button=document.getElementById(buttonId);
+  button.addEventListener("mousedown",()=>{
+    movePlayer(dx,dy);
+  });
+  button.addEventListener("click",()=>{
+    movePlayer(dx,dy);
+  });
+}
+
+/* ---------- buttons ---------- */
+
+document.getElementById("startBtn").addEventListener("click",startRide);
+document.getElementById("wonkoBtn").addEventListener("click",wonko);
+
+bindMove("leftBtn",-1,0);
+bindMove("rightBtn",1,0);
+bindMove("upBtn",0,-1);
+bindMove("downBtn",0,1);
+
+document.getElementById("resetBtn").addEventListener("click",()=>{
+  state.mode="ride";
+  state.runningRide=false;
+  state.elevatorActive=false;
+  state.floor=1;
+  state.chaos=0;
+  state.rides=0;
+  state.floors=0;
+  state.pigs=0;
+  state.wonkos=0;
+  state.rideTime=0;
+  clearPigs();
+  particles.length=0;
+  setStatus("🔄 restarted. press start ride.");
+  log("🔄 game restarted.");
+  updateStats();
+});
+
+/* ---------- game loop ---------- */
+
+function loop(now){
+  const dt=Math.min(.033,(now-lastTime)/1000);
+  lastTime=now;
+
+  inputMovement();
+  update(dt);
+  draw();
+
+  requestAnimationFrame(loop);
+}
+
+log("🎢 welcome to the most normal amusement park ever.");
+updateStats();
+draw();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
+'''
+
+out = Path("/mnt/data/rollercoaster_elevator_chaos.html")
+out.write_text(html, encoding="utf-8")
+
+scripts = re.findall(r"<script>([\s\S]*?)</script>", html)
+check_file = Path("/mnt/data/rollercoaster_elevator_chaos_check.js")
+check_file.write_text(scripts[-1], encoding="utf-8")
+check = subprocess.run(["node","--check",str(check_file)], text=True, capture_output=True)
+check_file.unlink(missing_ok=True)
+
+print(f"Created {out} ({out.stat().st_size:,} bytes)")
+print("JavaScript syntax check:", "PASS" if check.returncode == 0 else "FAIL")
+if check.returncode != 0:
+    print(check.stderr)
